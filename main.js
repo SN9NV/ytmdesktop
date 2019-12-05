@@ -13,6 +13,7 @@ const fs = require("fs");
 const electronStore = require("electron-store");
 const store = new electronStore();
 const discordRPC = require("./providers/discordRpcProvider");
+const scrobblerProvider = require("./providers/scrobblerProvider");
 const __ = require("./providers/translateProvider");
 const { statusBarMenu } = require("./providers/templateProvider");
 const { setMac, calcYTViewSize } = require("./utils/calcYTViewSize");
@@ -25,6 +26,7 @@ const {
   companionWindowTitle,
   companionWindowSettings
 } = require("./server.config");
+const themePath = path.join(app.getAppPath(), "/assets/custom-theme.css");
 
 if (store.get("settings-companion-server")) {
   require("./server");
@@ -76,6 +78,10 @@ if (isWindows()) {
   );
   const menu = Menu.buildFromTemplate(statusBarMenu);
   Menu.setApplicationMenu(menu);
+}
+
+if (!themePath) {
+  fs.writeFileSync(themePath, `/** \n * Custom Theme \n */`);
 }
 
 function createWindow() {
@@ -132,14 +138,14 @@ function createWindow() {
     }
   }
   mainWindow = new BrowserWindow(broswerWindowConfig);
-
   const view = new BrowserView({
     webPreferences: {
-      nodeIntegration: true
+      nodeIntegration: true,
+      preload: path.join(app.getAppPath(), "/utils/preloadContextMenu.js")
     }
   });
 
-  mainWindow.loadFile("./pages/index.html");
+  mainWindow.loadFile(path.join(app.getAppPath(), "/pages/home/home.html"));
   mainWindow.setBrowserView(view);
   setMac(isMac()); // Pass true to utils if currently running under mac
   view.setBounds(calcYTViewSize(store, mainWindow));
@@ -149,6 +155,7 @@ function createWindow() {
   }
 
   view.webContents.loadURL(mainWindowUrl);
+
   let checkConnectionTimeoutHandler;
   async function checkConnection() {
     /**
@@ -252,6 +259,7 @@ function createWindow() {
     );
   });
 
+  // view.webContents.openDevTools({ mode: 'detach' });
   view.webContents.on("did-navigate-in-page", function() {
     store.set("window-url", view.webContents.getURL());
     view.webContents.insertCSS(`
@@ -267,19 +275,14 @@ function createWindow() {
 
             /* Handle */
             ::-webkit-scrollbar-thumb {
-                background: #f44336;
+                background: #555;
             }
 
             /* Handle on hover */
             ::-webkit-scrollbar-thumb:hover {
-                background: #555;
+                background: #f44336;
             }
         `);
-    // Currently just that simple
-    const themePath = path.join(__dirname, "assets/theme.css");
-    if (fs.existsSync(themePath)) {
-      view.webContents.insertCSS(fs.readFileSync(themePath).toString());
-    }
   });
 
   view.webContents.on("media-started-playing", function() {
@@ -407,6 +410,20 @@ function createWindow() {
     );
   });
 
+  view.webContents.on("did-start-navigation", function(event) {
+    loadCustomTheme(view);
+
+    view.webContents.executeJavaScript("window.location", null, function(
+      location
+    ) {
+      if (location.hostname != "music.youtube.com") {
+        mainWindow.send("off-the-road");
+      } else {
+        mainWindow.send("on-the-road");
+      }
+    });
+  });
+
   function updateActivity(songTitle, songAuthor) {
     let nowPlaying = songTitle + " - " + songAuthor;
     logDebug(nowPlaying);
@@ -419,6 +436,7 @@ function createWindow() {
     mainWindow.setTitle(nowPlaying);
     tray.balloon(songTitle, songAuthor);
     discordRPC.activity(songTitle, songAuthor);
+    scrobblerProvider.updateTrackInfo(songTitle, songAuthor);
   }
 
   view.webContents.on("media-started-playing", function() {
@@ -502,6 +520,10 @@ function createWindow() {
     if (isMac()) {
       app.exit();
     }
+  });
+
+  app.on("quit", function() {
+    tray.destroy();
   });
 
   globalShortcut.register("MediaPlayPause", function() {
@@ -615,20 +637,26 @@ function createWindow() {
 
   ipcMain.on("show-settings", function() {
     const settings = new BrowserWindow({
-      parent: mainWindow,
-      modal: true,
+      //parent: mainWindow,
+      modal: false,
       frame: false,
       center: true,
       resizable: true,
       backgroundColor: "#232323",
-      width: 800,
+      width: 900,
+      minWidth: 900,
+      height: 550,
+      minHeight: 550,
       icon: path.join(__dirname, "./assets/favicon.png"),
+      autoHideMenuBar: false,
+      skipTaskbar: false,
       webPreferences: {
         nodeIntegration: true
-      },
-      autoHideMenuBar: true
+      }
     });
-    settings.loadFile(path.join(__dirname, "./pages/settings.html"));
+    settings.loadFile(
+      path.join(app.getAppPath(), "/pages/settings/settings.html")
+    );
     //settings.webContents.openDevTools();
   });
 
@@ -636,7 +664,44 @@ function createWindow() {
     switchClipboardWatcher();
   });
 
+  ipcMain.on("reset-url", () => {
+    mainWindow.getBrowserView().webContents.loadURL(mainWindowUrl);
+  });
+
+  ipcMain.on("show-editor-theme", function() {
+    const editor = new BrowserWindow({
+      frame: false,
+      center: true,
+      resizable: true,
+      backgroundColor: "#232323",
+      frame: store.get("titlebar-type", "nice") !== "nice",
+      width: 700,
+      height: 800,
+      maxHeight: 800,
+      minHeight: 800,
+      icon: path.join(__dirname, icon),
+      webPreferences: {
+        nodeIntegration: true
+      }
+    });
+
+    editor.loadFile(path.join(app.getAppPath(), "/pages/editor/editor.html"));
+    // editor.webContents.openDevTools();
+  });
+
+  ipcMain.on("update-custom-theme", function() {
+    loadCustomTheme(view);
+  });
+
   // ipcMain.send('update-status-bar', '111', '222');
+
+  function loadCustomTheme(view) {
+    if (store.get("settings-custom-theme")) {
+      if (fs.existsSync(themePath)) {
+        view.webContents.insertCSS(fs.readFileSync(themePath).toString());
+      }
+    }
+  }
 
   function switchClipboardWatcher() {
     logDebug(
@@ -764,7 +829,7 @@ function createLyricsWindow() {
       nodeIntegration: true
     }
   });
-  lyrics.loadFile(path.join(__dirname, "./pages/lyrics.html"));
+  lyrics.loadFile(path.join(__dirname, "./pages/lyrics/lyrics.html"));
   //lyrics.webContents.openDevTools();
 }
 

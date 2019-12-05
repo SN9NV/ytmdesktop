@@ -1,3 +1,5 @@
+const { ipcMain } = require("electron");
+
 let statusBarMenu = [
   {
     label: "Edit",
@@ -28,6 +30,20 @@ let statusBarMenu = [
       },
       {
         role: "selectall"
+      },
+      {
+        type: "separator"
+      },
+      {
+        label: "Speech",
+        submenu: [
+          {
+            role: "startspeaking"
+          },
+          {
+            role: "stopspeaking"
+          }
+        ]
       }
     ]
   },
@@ -70,13 +86,64 @@ let statusBarMenu = [
     ]
   },
   {
+    label: "History",
+    submenu: [
+      {
+        label: "Home(YTMusic)",
+        accelerator: "CmdOrCtrl+H",
+        click(item, focusedWindow) {
+          if (focusedWindow)
+            focusedWindow
+              .getBrowserView()
+              .webContents.loadURL("https://music.youtube.com");
+        }
+      },
+      {
+        type: "separator"
+      },
+      {
+        label: "Back",
+        accelerator: "CmdOrCtrl+[",
+        click(item, focusedWindow) {
+          if (focusedWindow)
+            if (focusedWindow.getBrowserView().webContents.canGoBack())
+              focusedWindow.getBrowserView().webContents.goBack();
+        }
+      },
+      {
+        label: "Forward",
+        accelerator: "CmdOrCtrl+]",
+        click(item, focusedWindow) {
+          if (focusedWindow)
+            if (focusedWindow.getBrowserView().webContents.canGoForward())
+              focusedWindow.getBrowserView().webContents.goForward();
+        }
+      }
+    ]
+  },
+  {
     role: "window",
     submenu: [
       {
+        label: "Close",
+        accelerator: "CmdOrCtrl+W",
+        role: "close"
+      },
+      {
+        label: "Minimize",
+        accelerator: "CmdOrCtrl+M",
         role: "minimize"
       },
       {
-        role: "close"
+        label: "Zoom",
+        role: "zoom"
+      },
+      {
+        type: "separator"
+      },
+      {
+        label: "Bring All to Front",
+        role: "front"
       }
     ]
   },
@@ -125,47 +192,6 @@ statusBarMenu.unshift({
     }
   ]
 });
-// Edit menu.
-statusBarMenu[1].submenu.push(
-  {
-    type: "separator"
-  },
-  {
-    label: "Speech",
-    submenu: [
-      {
-        role: "startspeaking"
-      },
-      {
-        role: "stopspeaking"
-      }
-    ]
-  }
-);
-// Window menu.
-statusBarMenu[3].submenu = [
-  {
-    label: "Close",
-    accelerator: "CmdOrCtrl+W",
-    role: "close"
-  },
-  {
-    label: "Minimize",
-    accelerator: "CmdOrCtrl+M",
-    role: "minimize"
-  },
-  {
-    label: "Zoom",
-    role: "zoom"
-  },
-  {
-    type: "separator"
-  },
-  {
-    label: "Bring All to Front",
-    role: "front"
-  }
-];
 
 const popUpMenu = (
   __,
@@ -234,19 +260,7 @@ const popUpMenu = (
       label: __.trans("LABEL_LYRICS"),
       type: "normal",
       click: function() {
-        const lyrics = new BrowserWindow({
-          frame: false,
-          center: true,
-          resizable: true,
-          backgroundColor: "#232323",
-          width: 700,
-          height: 800,
-          icon: path.join(__dirname, "../assets/favicon.png"),
-          webPreferences: {
-            nodeIntegration: true
-          }
-        });
-        lyrics.loadFile(path.join(__dirname, "../pages/lyrics.html"));
+        ipcMain.emit("show-lyrics", true);
       }
     },
 
@@ -256,20 +270,7 @@ const popUpMenu = (
       label: __.trans("LABEL_SETTINGS"),
       type: "normal",
       click: function() {
-        const settings = new BrowserWindow({
-          parent: saved_mainWindow,
-          modal: true,
-          frame: false,
-          center: true,
-          resizable: true,
-          backgroundColor: "#232323",
-          width: 800,
-          icon: path.join(__dirname, "../assets/favicon.png"),
-          webPreferences: {
-            nodeIntegration: true
-          }
-        });
-        settings.loadFile(path.join(__dirname, "../pages/settings.html"));
+        ipcMain.emit("show-settings", true);
       }
     },
 

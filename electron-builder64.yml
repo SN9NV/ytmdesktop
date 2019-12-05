@@ -22,6 +22,7 @@ win:
 mac:
   icon: assets
   category: public.app-category.music
+  darkModeSupport: true
   target:
     - dmg
     - pkg
@@ -29,4 +30,11 @@ mac:
     provider: generic
     url: 'https://dl.ytmdesktop.app/mac'
     channel: latest
-  darkModeSupport: true
+
+linux:
+  icon: assets
+  category: AudioVideo
+  publish:
+    provider: generic
+    url: 'https://dl.ytmdesktop.app/lin'
+    channel: latest
